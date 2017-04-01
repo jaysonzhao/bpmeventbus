@@ -12,8 +12,8 @@ public class BpmPushMsgOracleHelper implements IBpmPushMsgHelper {
 //			.getLogger(BpmPushMsgOracleHelper.class);
 	private final String jndiName="jndi/smartforms";
 	private final String insertMsgSql="insert into BPM_ORIGINAL_PUSH_MSG "
-			+ " (MSG_ID, MSG_BODY, CREATE_TIME, STATUS, UPDATE_TIME) "
-			+ " values (?,?,?,?,?)";
+			+ " (MSG_ID, MSG_BODY, CREATE_TIME, UPDATE_TIME) "
+			+ " values (?,?,?,?)";
 	
 	@Override
 	public String createMsg(String msgBody) {
@@ -34,8 +34,7 @@ public class BpmPushMsgOracleHelper implements IBpmPushMsgHelper {
 			ps.setString(1, id);
 			ps.setString(2, msgBody);
 			ps.setTimestamp(3, tsnow);
-			ps.setString(4, "0");
-			ps.setTimestamp(5, tsnow);
+			ps.setTimestamp(4, tsnow);
 			ps.executeUpdate();
 		} catch (Exception ex) {
 			System.out.println("创建BPM原始推送消息失败！");
