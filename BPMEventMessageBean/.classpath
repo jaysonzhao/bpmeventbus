@@ -17,6 +17,7 @@
 		</attributes>
 	</classpathentry>
 	<classpathentry kind="con" path="org.eclipse.jst.j2ee.internal.module.container"/>
-	<classpathentry kind="lib" path="C:/tmp/j2ee.jar"/>
+	<classpathentry kind="lib" path="D:/git-workspace/bpmeventbus/BPMEventMessageBean/lib/j2ee.jar"/>
+	<classpathentry kind="lib" path="D:/git-workspace/bpmeventbus/BPMEventMessageBean/lib/ojdbc6.jar"/>
 	<classpathentry kind="output" path="build/classes"/>
 </classpath>
