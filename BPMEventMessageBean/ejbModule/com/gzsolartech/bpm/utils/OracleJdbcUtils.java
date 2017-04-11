@@ -14,14 +14,13 @@ import javax.sql.DataSource;
  *
  */
 public class OracleJdbcUtils {
-//	private static final Logger LOG = LoggerFactory
-//			.getLogger(OracleJdbcUtils.class);
+	private final String JNDI_NAME="jndi/smartforms";
 	private DataSource ds = null;
 	
-	public OracleJdbcUtils(String jndiName) {
+	public OracleJdbcUtils() {
 		try {
 			Context initContext = new InitialContext();
-			ds = (DataSource) initContext.lookup(jndiName);// JNDI
+			ds = (DataSource) initContext.lookup(JNDI_NAME);// JNDI
 		} catch (Exception ex) {
 			System.out.println("初始化JNDI连接失败！");
 			ex.printStackTrace();
