@@ -5,6 +5,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.URL;
 import java.net.URLConnection;
+import java.util.Map;
 import java.util.Random;
 
 import javax.ejb.ActivationConfigProperty;
@@ -16,7 +17,9 @@ import javax.jms.Message;
 import javax.jms.MessageListener;
 import javax.jms.TextMessage;
 
+import com.gzsolartech.bpm.utils.BpmGlobalConfigOracleHelper;
 import com.gzsolartech.bpm.utils.BpmPushMsgOracleHelper;
+import com.gzsolartech.bpm.utils.IBpmGlobalConfigHelper;
 
 /**
  * Message-Driven Bean implementation class for: EventReader
@@ -26,8 +29,11 @@ import com.gzsolartech.bpm.utils.BpmPushMsgOracleHelper;
 		@ActivationConfigProperty(propertyName = "destinationType", propertyValue = "javax.jms.Queue") }, mappedName = "bpd")
 public class EventReader implements MessageListener {
 	private BpmPushMsgOracleHelper pushMsgHelper=new BpmPushMsgOracleHelper();
-	public static final String postUrl = "http://192.168.1.110:7788/smartforms/console/bpm/taskInfo/pullOrigMsg.xsp";
+	private IBpmGlobalConfigHelper bpmgcfgHelper=new BpmGlobalConfigOracleHelper();
+	private final String PULL_MSG_CTXPATH="console/bpm/taskInfo/pullOrigMsg.xsp";
+//	public static final String postUrl = "http://192.168.1.110:7788/smartforms/console/bpm/taskInfo/pullOrigMsg.xsp";
 //	public static final String postUrl = "http://10.161.2.170:9081/smartforms/console/bpm/taskInfo/pullOrigMsg.xsp";
+//	public static final String postUrl = "http://10.161.131.15/console/bpm/taskInfo/pullOrigMsg.xsp";
 //	public static final String postUrl = "http://192.168.1.69:8083/smartforms/console/bpm/taskInfo/pullOrigMsg.xsp";
 //	public static final String gfPostUrl = "http://192.168.1.69:8081/gf/console/bpm/taskInfo/push.xsp";
 
@@ -52,6 +58,18 @@ public class EventReader implements MessageListener {
 				//先使用单线程的方式将推送过来的消息存放的数据库
 				String msgId=pushMsgHelper.createMsg(msg.getText());
 				System.out.println("=========msgId::: "+msgId);
+				//获取BPM服务器配置信息
+				Map<String, Object> dataMap=bpmgcfgHelper.getFirstActConfig();
+				String host=(String)dataMap.get("BPMFORMS_HOST");
+				host=(host==null) ? "" : host;
+				host=host.endsWith("/") ? host.trim() : host.trim()+"/";
+				String webctx=(String)dataMap.get("BPMFORMS_WEB_CONTEXT");
+				webctx=(webctx==null) ? "" : webctx;
+				webctx=webctx.startsWith("/") ? webctx.trim().substring(1) : webctx.trim();
+				String postUrl=host+webctx;
+				postUrl=(postUrl.endsWith("/")) ? postUrl : postUrl+"/";
+				postUrl+=PULL_MSG_CTXPATH;
+				System.out.println("postUrl======="+postUrl);
 				if (msgId!=null && !msgId.trim().isEmpty()) {
 					//再使用多线程的方式通知消息解析器到数据库中获取消息，然后进行解析
 					thread(msgId, postUrl);
