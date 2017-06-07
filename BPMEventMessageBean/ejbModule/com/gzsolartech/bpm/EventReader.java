@@ -5,8 +5,14 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.URL;
 import java.net.URLConnection;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.Timestamp;
+import java.util.Date;
 import java.util.Map;
 import java.util.Random;
+import java.util.UUID;
 
 import javax.ejb.ActivationConfigProperty;
 import javax.ejb.MessageDriven;
@@ -58,6 +64,36 @@ public class EventReader implements MessageListener {
 				//先使用单线程的方式将推送过来的消息存放的数据库
 				String msgId=pushMsgHelper.createMsg(msg.getText());
 				System.out.println("=========msgId::: "+msgId);
+				
+				//------- 存储到另外一个数据库，临时测试使用 --------------------
+				/*String insertMsgSql="insert into BPM_ORIGINAL_PUSH_MSG "
+						+ " (MSG_ID, MSG_BODY, CREATE_TIME, UPDATE_TIME) "
+						+ " values (?,?,?,?)";
+				Connection conn=null;
+				PreparedStatement ps=null;
+				try {
+					Class.forName("oracle.jdbc.driver.OracleDriver").newInstance();
+					conn=DriverManager.getConnection("jdbc:oracle:thin:@192.168.1.69:1521:smartformsdb", "aacsmart", "aacsmart");
+					ps=conn.prepareStatement(insertMsgSql);
+					Timestamp tsnow=new Timestamp(new Date().getTime());
+					ps.setString(1, msgId);
+					ps.setString(2, msg.getText());
+					ps.setTimestamp(3, tsnow);
+					ps.setTimestamp(4, tsnow);
+					int result=ps.executeUpdate();
+					System.out.println("update result===="+result);
+				} catch (Exception ex) {
+					ex.printStackTrace();
+				} finally {
+					if (ps!=null) {
+						ps.close();
+					}
+					if (conn!=null) {
+						conn.close();
+					}
+				}*/
+				//-------------------------------------
+				
 				//获取BPM服务器配置信息
 				Map<String, Object> dataMap=bpmgcfgHelper.getFirstActConfig();
 				String host=(String)dataMap.get("BPMFORMS_HOST");
@@ -69,7 +105,6 @@ public class EventReader implements MessageListener {
 				String postUrl=host+webctx;
 				postUrl=(postUrl.endsWith("/")) ? postUrl : postUrl+"/";
 				postUrl+=PULL_MSG_CTXPATH;
-				System.out.println("postUrl======="+postUrl);
 				if (msgId!=null && !msgId.trim().isEmpty()) {
 					//再使用多线程的方式通知消息解析器到数据库中获取消息，然后进行解析
 					thread(msgId, postUrl);
@@ -89,22 +124,27 @@ public class EventReader implements MessageListener {
 	}
 	
 	public void thread(final String msgId, final String pullMsgUrl) {
-		Random random=new Random();
-		int max=10;
-	    int min=1;
-	    int rnum = random.nextInt(max)%(max-min+1) + min;
-		try {
-			//休眠1-10秒后再推送消息，防止高并发推送请求的发生
-			Thread.sleep(rnum*1000);
-		} catch (InterruptedException e) {
-			System.out.println("在推送BPM消息前进入休眠状态发生异常！");
-			e.printStackTrace();
-		}
+//		Random random=new Random();
+//		int max=10;
+//	    int min=1;
+//	    int rnum = random.nextInt(max)%(max-min+1) + min;
+//		try {
+//			//休眠1-10秒后再推送消息，防止高并发推送请求的发生
+//			Thread.sleep(rnum*1000);
+//		} catch (InterruptedException e) {
+//			System.out.println("在推送BPM消息前进入休眠状态发生异常！");
+//			e.printStackTrace();
+//		}
 		new Thread(new Runnable() {
 			@Override
 			public void run() {
 				String resultMsg=send(msgId, pullMsgUrl);
 				System.out.println("response result::=============="+resultMsg);
+				
+				//////////////test /////////////////////////
+//				resultMsg=send(msgId, "http://192.168.1.69:8083/smartforms/"+PULL_MSG_CTXPATH);
+//				System.out.println("response2 result::=============="+resultMsg);
+				//////////////////////////
 			}
 		}).start();
 	}
@@ -113,6 +153,7 @@ public class EventReader implements MessageListener {
 		String result="";
 		try {
 			URL url = new URL(addressUrl);
+			System.out.println("addressUrl======="+addressUrl);
 			URLConnection con = url.openConnection();
 			con.setDoOutput(true);
             con.setDoInput(true);

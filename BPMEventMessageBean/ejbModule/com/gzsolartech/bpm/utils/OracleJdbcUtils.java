@@ -19,7 +19,7 @@ public class OracleJdbcUtils {
 	private static final String JNDI_NAME="jndi/smartforms";
 	private static DataSource ds;
 	private static Context initContext;
-	private String TEST_SQL="select 1 from dual";
+	private static final String TEST_SQL="select 1 from dual";
 	
 	static {
 		try {
