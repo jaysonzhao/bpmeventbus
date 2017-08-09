@@ -37,6 +37,7 @@ public class EventReader implements MessageListener {
 	private BpmPushMsgOracleHelper pushMsgHelper=new BpmPushMsgOracleHelper();
 	private IBpmGlobalConfigHelper bpmgcfgHelper=new BpmGlobalConfigOracleHelper();
 	private final String PULL_MSG_CTXPATH="console/bpm/taskInfo/pullOrigMsg.xsp";
+	private final String separator=" ======== ";
 //	public static final String postUrl = "http://192.168.1.110:7788/smartforms/console/bpm/taskInfo/pullOrigMsg.xsp";
 //	public static final String postUrl = "http://10.161.2.170:9081/smartforms/console/bpm/taskInfo/pullOrigMsg.xsp";
 //	public static final String postUrl = "http://10.161.131.15/console/bpm/taskInfo/pullOrigMsg.xsp";
@@ -63,7 +64,7 @@ public class EventReader implements MessageListener {
 				System.out.println("MESSAGE BEAN: Message received: "+msg.getText());
 				//先使用单线程的方式将推送过来的消息存放的数据库
 				String msgId=pushMsgHelper.createMsg(msg.getText());
-				System.out.println("=========msgId::: "+msgId);
+				System.out.println("msgId"+separator+msgId);
 				
 				//------- 存储到另外一个数据库，临时测试使用 --------------------
 				/*String insertMsgSql="insert into BPM_ORIGINAL_PUSH_MSG "
@@ -139,7 +140,7 @@ public class EventReader implements MessageListener {
 			@Override
 			public void run() {
 				String resultMsg=send(msgId, pullMsgUrl);
-				System.out.println("response result::=============="+resultMsg);
+				System.out.println("msgId="+msgId+" response result"+separator+resultMsg);
 				
 				//////////////test /////////////////////////
 //				resultMsg=send(msgId, "http://192.168.1.69:8083/smartforms/"+PULL_MSG_CTXPATH);
@@ -153,7 +154,7 @@ public class EventReader implements MessageListener {
 		String result="";
 		try {
 			URL url = new URL(addressUrl);
-			System.out.println("addressUrl======="+addressUrl);
+			System.out.println("addressUrl"+separator+addressUrl);
 			URLConnection con = url.openConnection();
 			con.setDoOutput(true);
             con.setDoInput(true);
