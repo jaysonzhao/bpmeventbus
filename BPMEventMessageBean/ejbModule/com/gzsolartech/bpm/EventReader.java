@@ -6,6 +6,10 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Map;
 
 import javax.ejb.ActivationConfigProperty;
@@ -17,9 +21,13 @@ import javax.jms.Message;
 import javax.jms.MessageListener;
 import javax.jms.TextMessage;
 
+
+
+import com.alibaba.fastjson.JSONObject;
 import com.gzsolartech.bpm.utils.BpmGlobalConfigOracleHelper;
 import com.gzsolartech.bpm.utils.BpmPushMsgOracleHelper;
 import com.gzsolartech.bpm.utils.IBpmGlobalConfigHelper;
+import com.gzsolartech.bpm.utils.OracleJdbcUtils;
 
 /**
  * Message-Driven Bean implementation class for: EventReader
@@ -135,7 +143,30 @@ public class EventReader implements MessageListener {
 			public void run() {
 				String resultMsg=send(msgId, pullMsgUrl);
 				System.out.println("msgId="+msgId+", response result"+separator+resultMsg);
-				
+				//将返回结果存储到数据库中
+				OracleJdbcUtils orclUtils=new OracleJdbcUtils();
+				Connection conn=orclUtils.getConnection();
+				StringBuffer sbuf=new StringBuffer();
+				sbuf.append("insert into BPM_ORIGINAL_PUSH_MSG_LOG (MSG_ID, RESULT_TYPE, RESULT_MSG, CREATE_TIME) ");
+				sbuf.append(" values (?,?,?,?)");
+				try {
+					JSONObject jsoResult=JSONObject.parseObject(resultMsg);
+					PreparedStatement pst=conn.prepareStatement(sbuf.toString());
+					pst.setString(1, msgId);
+					pst.setString(2, jsoResult.getString("result"));
+					pst.setString(3, jsoResult.getString("msg"));
+					pst.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
+					pst.executeUpdate();
+					pst.close();
+				} catch (Exception e) {
+					e.printStackTrace();
+				} finally {
+					try {
+						conn.close();
+					} catch (SQLException e) {
+						e.printStackTrace();
+					}
+				}
 				//////////////test /////////////////////////
 //				resultMsg=send(msgId, "http://192.168.1.69:8083/smartforms/"+PULL_MSG_CTXPATH);
 //				System.out.println("response2 result::=============="+resultMsg);
@@ -145,10 +176,10 @@ public class EventReader implements MessageListener {
 	}
 
 	public String send(String msgId, String addressUrl) {
-		String result="";
 		OutputStreamWriter out=null;
 		BufferedReader bufrd=null;
 		int timeout=60000;
+		JSONObject jsoResult=new JSONObject();
 		try {
 			URL url = new URL(addressUrl);
 			System.out.println("addressUrl"+separator+addressUrl+"?msgId="+msgId);
@@ -170,9 +201,18 @@ public class EventReader implements MessageListener {
 			out.flush();
 			bufrd = new BufferedReader(new InputStreamReader(
 					con.getInputStream()));
-			result=bufrd.readLine();
+			String result="";
+			String line=bufrd.readLine();
+			while (line!=null) {
+				result+=line;
+				line=bufrd.readLine();
+			}
+			jsoResult.put("result", "success");
+			jsoResult.put("msg", result);
 		} catch (Exception ex) {
 			ex.printStackTrace();
+			jsoResult.put("result", "failed");
+			jsoResult.put("msg", ex.toString());
 		} finally {
 			if (out!=null) {
 				try {
@@ -189,6 +229,6 @@ public class EventReader implements MessageListener {
 				}
 			}
 		}
-		return result;
+		return jsoResult.toString();
 	}
 }
