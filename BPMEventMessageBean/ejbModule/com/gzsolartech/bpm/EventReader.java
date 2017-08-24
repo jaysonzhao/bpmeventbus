@@ -1,18 +1,12 @@
 package com.gzsolartech.bpm;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLConnection;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.Timestamp;
-import java.util.Date;
 import java.util.Map;
-import java.util.Random;
-import java.util.UUID;
 
 import javax.ejb.ActivationConfigProperty;
 import javax.ejb.MessageDriven;
@@ -140,7 +134,7 @@ public class EventReader implements MessageListener {
 			@Override
 			public void run() {
 				String resultMsg=send(msgId, pullMsgUrl);
-				System.out.println("msgId="+msgId+" response result"+separator+resultMsg);
+				System.out.println("msgId="+msgId+", response result"+separator+resultMsg);
 				
 				//////////////test /////////////////////////
 //				resultMsg=send(msgId, "http://192.168.1.69:8083/smartforms/"+PULL_MSG_CTXPATH);
@@ -152,28 +146,48 @@ public class EventReader implements MessageListener {
 
 	public String send(String msgId, String addressUrl) {
 		String result="";
+		OutputStreamWriter out=null;
+		BufferedReader bufrd=null;
+		int timeout=60000;
 		try {
 			URL url = new URL(addressUrl);
-			System.out.println("addressUrl"+separator+addressUrl);
-			URLConnection con = url.openConnection();
+			System.out.println("addressUrl"+separator+addressUrl+"?msgId="+msgId);
+			HttpURLConnection con = (HttpURLConnection)url.openConnection();
 			con.setDoOutput(true);
             con.setDoInput(true);
-			con.setRequestProperty("Pragma:", "no-cache");
+            //设置连接超时为60秒
+            con.setConnectTimeout(timeout);
+            con.setReadTimeout(timeout);
+            con.setRequestMethod("POST");
+			con.setRequestProperty("Pragma", "no-cache");
 			con.setRequestProperty("Cache-Control", "no-cache");
 			con.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-			OutputStreamWriter out = new OutputStreamWriter(
+			out = new OutputStreamWriter(
 					con.getOutputStream());
 			// out.write(new String(msg.getText().getBytes("ISO-8859-1")));
 //			out.write(new String(msg.getBytes("utf-8")));
 			out.write("msgId="+msgId);
 			out.flush();
-			out.close();
-			BufferedReader br = new BufferedReader(new InputStreamReader(
+			bufrd = new BufferedReader(new InputStreamReader(
 					con.getInputStream()));
-			result=br.readLine();
-			br.close();
+			result=bufrd.readLine();
 		} catch (Exception ex) {
 			ex.printStackTrace();
+		} finally {
+			if (out!=null) {
+				try {
+					out.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+			if (bufrd!=null) {
+				try {
+					bufrd.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
 		}
 		return result;
 	}
