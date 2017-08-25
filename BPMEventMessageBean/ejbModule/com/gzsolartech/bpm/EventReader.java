@@ -1,18 +1,16 @@
 package com.gzsolartech.bpm;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLConnection;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.util.Date;
 import java.util.Map;
-import java.util.Random;
-import java.util.UUID;
 
 import javax.ejb.ActivationConfigProperty;
 import javax.ejb.MessageDriven;
@@ -23,9 +21,13 @@ import javax.jms.Message;
 import javax.jms.MessageListener;
 import javax.jms.TextMessage;
 
+
+
+import com.alibaba.fastjson.JSONObject;
 import com.gzsolartech.bpm.utils.BpmGlobalConfigOracleHelper;
 import com.gzsolartech.bpm.utils.BpmPushMsgOracleHelper;
 import com.gzsolartech.bpm.utils.IBpmGlobalConfigHelper;
+import com.gzsolartech.bpm.utils.OracleJdbcUtils;
 
 /**
  * Message-Driven Bean implementation class for: EventReader
@@ -140,8 +142,31 @@ public class EventReader implements MessageListener {
 			@Override
 			public void run() {
 				String resultMsg=send(msgId, pullMsgUrl);
-				System.out.println("msgId="+msgId+" response result"+separator+resultMsg);
-				
+				System.out.println("msgId="+msgId+", response result"+separator+resultMsg);
+				//将返回结果存储到数据库中
+				OracleJdbcUtils orclUtils=new OracleJdbcUtils();
+				Connection conn=orclUtils.getConnection();
+				StringBuffer sbuf=new StringBuffer();
+				sbuf.append("insert into BPM_ORIGINAL_PUSH_MSG_LOG (MSG_ID, RESULT_TYPE, RESULT_MSG, CREATE_TIME) ");
+				sbuf.append(" values (?,?,?,?)");
+				try {
+					JSONObject jsoResult=JSONObject.parseObject(resultMsg);
+					PreparedStatement pst=conn.prepareStatement(sbuf.toString());
+					pst.setString(1, msgId);
+					pst.setString(2, jsoResult.getString("result"));
+					pst.setString(3, jsoResult.getString("msg"));
+					pst.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
+					pst.executeUpdate();
+					pst.close();
+				} catch (Exception e) {
+					e.printStackTrace();
+				} finally {
+					try {
+						conn.close();
+					} catch (SQLException e) {
+						e.printStackTrace();
+					}
+				}
 				//////////////test /////////////////////////
 //				resultMsg=send(msgId, "http://192.168.1.69:8083/smartforms/"+PULL_MSG_CTXPATH);
 //				System.out.println("response2 result::=============="+resultMsg);
@@ -151,30 +176,59 @@ public class EventReader implements MessageListener {
 	}
 
 	public String send(String msgId, String addressUrl) {
-		String result="";
+		OutputStreamWriter out=null;
+		BufferedReader bufrd=null;
+		int timeout=60000;
+		JSONObject jsoResult=new JSONObject();
 		try {
 			URL url = new URL(addressUrl);
-			System.out.println("addressUrl"+separator+addressUrl);
-			URLConnection con = url.openConnection();
+			System.out.println("addressUrl"+separator+addressUrl+"?msgId="+msgId);
+			HttpURLConnection con = (HttpURLConnection)url.openConnection();
 			con.setDoOutput(true);
             con.setDoInput(true);
-			con.setRequestProperty("Pragma:", "no-cache");
+            //设置连接超时为60秒
+            con.setConnectTimeout(timeout);
+            con.setReadTimeout(timeout);
+            con.setRequestMethod("POST");
+			con.setRequestProperty("Pragma", "no-cache");
 			con.setRequestProperty("Cache-Control", "no-cache");
 			con.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-			OutputStreamWriter out = new OutputStreamWriter(
+			out = new OutputStreamWriter(
 					con.getOutputStream());
 			// out.write(new String(msg.getText().getBytes("ISO-8859-1")));
 //			out.write(new String(msg.getBytes("utf-8")));
 			out.write("msgId="+msgId);
 			out.flush();
-			out.close();
-			BufferedReader br = new BufferedReader(new InputStreamReader(
+			bufrd = new BufferedReader(new InputStreamReader(
 					con.getInputStream()));
-			result=br.readLine();
-			br.close();
+			String result="";
+			String line=bufrd.readLine();
+			while (line!=null) {
+				result+=line;
+				line=bufrd.readLine();
+			}
+			jsoResult.put("result", "success");
+			jsoResult.put("msg", result);
 		} catch (Exception ex) {
 			ex.printStackTrace();
+			jsoResult.put("result", "failed");
+			jsoResult.put("msg", ex.toString());
+		} finally {
+			if (out!=null) {
+				try {
+					out.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+			if (bufrd!=null) {
+				try {
+					bufrd.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
 		}
-		return result;
+		return jsoResult.toString();
 	}
 }
