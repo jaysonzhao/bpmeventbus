@@ -21,8 +21,7 @@ import javax.jms.Message;
 import javax.jms.MessageListener;
 import javax.jms.TextMessage;
 
-
-
+import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.gzsolartech.bpm.utils.BpmGlobalConfigOracleHelper;
 import com.gzsolartech.bpm.utils.BpmPushMsgOracleHelper;
@@ -141,21 +140,34 @@ public class EventReader implements MessageListener {
 		new Thread(new Runnable() {
 			@Override
 			public void run() {
-				String resultMsg=send(msgId, pullMsgUrl);
-				System.out.println("msgId="+msgId+", response result"+separator+resultMsg);
+				JSONObject jsoResultMsg=send(msgId, pullMsgUrl);
 				//将返回结果存储到数据库中
 				OracleJdbcUtils orclUtils=new OracleJdbcUtils();
 				Connection conn=orclUtils.getConnection();
 				StringBuffer sbuf=new StringBuffer();
-				sbuf.append("insert into BPM_ORIGINAL_PUSH_MSG_LOG (MSG_ID, RESULT_TYPE, RESULT_MSG, CREATE_TIME) ");
-				sbuf.append(" values (?,?,?,?)");
+				sbuf.append("insert into BPM_ORIGINAL_PUSH_MSG_LOG (MSG_ID, RESULT_TYPE, RESULT_MSG, "
+						+ " CREATE_TIME, ERROR_MSG) ");
+				sbuf.append(" values (?,?,?,?,?)");
 				try {
-					JSONObject jsoResult=JSONObject.parseObject(resultMsg);
+					//JSONObject jsoResult=JSONObject.parseObject(resultMsg);
 					PreparedStatement pst=conn.prepareStatement(sbuf.toString());
 					pst.setString(1, msgId);
-					pst.setString(2, jsoResult.getString("result"));
-					pst.setString(3, jsoResult.getString("msg"));
+					String result=jsoResultMsg.getString("result");
+					String returnType="";
+					if ("success".equals(result)) {
+						returnType=jsoResultMsg.getString("returnType");
+					}
+					//resultType是请求消息拉取的URL时返回的结果；记录在RESULT_TYPE字段中
+					pst.setString(2, returnType);
+					//result是send方法处理结果，一般为success，若抛出异常，就返回failed；
+					//记录在RESULT_MSG字段中
+					pst.setString(3, result);
 					pst.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
+					String errmsg=jsoResultMsg.getString("errmsg");
+					if (errmsg!=null && errmsg.length()>=4000) {
+						errmsg=errmsg.substring(0, 3995);
+					}
+					pst.setString(5, (errmsg==null) ? "" : errmsg);
 					pst.executeUpdate();
 					pst.close();
 				} catch (Exception e) {
@@ -175,7 +187,7 @@ public class EventReader implements MessageListener {
 		}).start();
 	}
 
-	public String send(String msgId, String addressUrl) {
+	public JSONObject send(String msgId, String addressUrl) {
 		OutputStreamWriter out=null;
 		BufferedReader bufrd=null;
 		int timeout=60000;
@@ -207,12 +219,24 @@ public class EventReader implements MessageListener {
 				result+=line;
 				line=bufrd.readLine();
 			}
+			System.out.println("msgId="+msgId+", response result"+separator+result);
 			jsoResult.put("result", "success");
-			jsoResult.put("msg", result);
+			//解析返回结果
+			JSONObject jsoTemp=JSONObject.parseObject(result);
+			String retResult=jsoTemp.getString("result");
+			JSONArray jayTemp=jsoTemp.getJSONArray("msgs");
+			String errMsgs="";
+			if (jayTemp!=null) {
+				for (int i=0; i<jayTemp.size(); i++) {
+					errMsgs+=jayTemp.getString(i)+",,,";
+				}
+			}
+			jsoResult.put("returnType", retResult);
+			jsoResult.put("errmsg", errMsgs);
 		} catch (Exception ex) {
 			ex.printStackTrace();
 			jsoResult.put("result", "failed");
-			jsoResult.put("msg", ex.toString());
+			jsoResult.put("errmsg", ex.toString());
 		} finally {
 			if (out!=null) {
 				try {
@@ -229,6 +253,6 @@ public class EventReader implements MessageListener {
 				}
 			}
 		}
-		return jsoResult.toString();
+		return jsoResult;
 	}
 }
