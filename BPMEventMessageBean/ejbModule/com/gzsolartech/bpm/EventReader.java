@@ -58,13 +58,19 @@ public class EventReader implements MessageListener {
 	@TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
 	public void onMessage(Message inMessage) {
 		TextMessage msg = null;
+		OracleJdbcUtils jdbcUtils=null;
+		Connection conn=null;
 		try {
+			//获取数据库连接
+			jdbcUtils=new OracleJdbcUtils();
+			conn=jdbcUtils.getConnection();
+			
 			// do things on receiving the event xml
 			if (inMessage instanceof TextMessage) {
 				msg = (TextMessage) inMessage;
 				System.out.println("MESSAGE BEAN: Message received: "+msg.getText());
 				//先使用单线程的方式将推送过来的消息存放的数据库
-				String msgId=pushMsgHelper.createMsg(msg.getText());
+				String msgId=pushMsgHelper.createMsg(conn, msg.getText());
 				System.out.println("msgId"+separator+msgId);
 				
 				//------- 存储到另外一个数据库，临时测试使用 --------------------
@@ -108,8 +114,8 @@ public class EventReader implements MessageListener {
 				postUrl=(postUrl.endsWith("/")) ? postUrl : postUrl+"/";
 				postUrl+=PULL_MSG_CTXPATH;
 				if (msgId!=null && !msgId.trim().isEmpty()) {
-					//再使用多线程的方式通知消息解析器到数据库中获取消息，然后进行解析
-					thread(msgId, postUrl);
+					//创建消息推送处理结果日志
+					createMsgLog(conn, msgId, postUrl);
 				}
 			} else {
 				System.out.println("Message of wrong type: "
@@ -118,14 +124,66 @@ public class EventReader implements MessageListener {
 		} catch (JMSException e) {
 			System.out.println("JMS异常！");
 			e.printStackTrace();
-
 		} catch (Throwable te) {
 			System.out.println("程序异常！");
 			te.printStackTrace();
+		} finally {
+			OracleJdbcUtils.close(conn);
 		}
 	}
 	
-	public void thread(final String msgId, final String pullMsgUrl) {
+	/**
+	 * 将BPM消息体推送到表单平台并且记录处理日志
+	 * @param conn 数据库连接
+	 * @param msgId  自定义消息ID
+	 * @param pullMsgUrl  推送消息URL
+	 */
+	public void createMsgLog(Connection conn, String msgId, String pullMsgUrl) {
+		JSONObject jsoResultMsg=sendMsg(msgId, pullMsgUrl);
+		//将返回结果存储到数据库中
+//		OracleJdbcUtils orclUtils=new OracleJdbcUtils();
+//		Connection conn=orclUtils.getConnection();
+		StringBuffer sbuf=new StringBuffer();
+		sbuf.append("insert into BPM_ORIGINAL_PUSH_MSG_LOG (MSG_ID, RESULT_TYPE, RESULT_MSG, "
+				+ " CREATE_TIME, ERROR_MSG) ");
+		sbuf.append(" values (?,?,?,?,?)");
+		try {
+			//JSONObject jsoResult=JSONObject.parseObject(resultMsg);
+			PreparedStatement pst=conn.prepareStatement(sbuf.toString());
+			pst.setString(1, msgId);
+			String result=jsoResultMsg.getString("result");
+			String returnType="";
+			if ("success".equals(result)) {
+				//returnType是远端处理结果
+				returnType=jsoResultMsg.getString("returnType");
+			}
+			//resultType是请求消息拉取的URL时返回的结果；记录在RESULT_TYPE字段中
+			pst.setString(2, returnType);
+			//result是sendMsg方法处理结果，一般为success，若抛出异常，就返回failed；
+			//记录在RESULT_MSG字段中
+			pst.setString(3, result);
+			pst.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
+			String errmsg=jsoResultMsg.getString("errmsg");
+			//错误信息过长时进行字符串截断
+			if (errmsg!=null && errmsg.length()>=4000) {
+				errmsg=errmsg.substring(0, 3995);
+			}
+			pst.setString(5, (errmsg==null) ? "" : errmsg);
+			pst.executeUpdate();
+			pst.close();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+//		} finally {
+//			try {
+//				conn.close();
+//			} catch (SQLException e) {
+//				e.printStackTrace();
+//			}
+//		}
+	}
+	
+	/*public void thread(final String msgId, final String pullMsgUrl) {
 //		Random random=new Random();
 //		int max=10;
 //	    int min=1;
@@ -185,9 +243,15 @@ public class EventReader implements MessageListener {
 				//////////////////////////
 			}
 		}).start();
-	}
+	}*/
 
-	public JSONObject send(String msgId, String addressUrl) {
+	/**
+	 * 将BPM消息推送到表单平台
+	 * @param msgId 自定义消息ID
+	 * @param addressUrl 推送URL
+	 * @return 返回JSON处理结果
+	 */
+	public JSONObject sendMsg(String msgId, String addressUrl) {
 		OutputStreamWriter out=null;
 		BufferedReader bufrd=null;
 		int timeout=60000;
