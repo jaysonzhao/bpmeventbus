@@ -141,14 +141,11 @@ public class EventReader implements MessageListener {
 	public void createMsgLog(Connection conn, String msgId, String pullMsgUrl) {
 		JSONObject jsoResultMsg=sendMsg(msgId, pullMsgUrl);
 		//将返回结果存储到数据库中
-//		OracleJdbcUtils orclUtils=new OracleJdbcUtils();
-//		Connection conn=orclUtils.getConnection();
 		StringBuffer sbuf=new StringBuffer();
 		sbuf.append("insert into BPM_ORIGINAL_PUSH_MSG_LOG (MSG_ID, RESULT_TYPE, RESULT_MSG, "
 				+ " CREATE_TIME, ERROR_MSG) ");
 		sbuf.append(" values (?,?,?,?,?)");
 		try {
-			//JSONObject jsoResult=JSONObject.parseObject(resultMsg);
 			PreparedStatement pst=conn.prepareStatement(sbuf.toString());
 			pst.setString(1, msgId);
 			String result=jsoResultMsg.getString("result");
@@ -174,13 +171,6 @@ public class EventReader implements MessageListener {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-//		} finally {
-//			try {
-//				conn.close();
-//			} catch (SQLException e) {
-//				e.printStackTrace();
-//			}
-//		}
 	}
 	
 	/*public void thread(final String msgId, final String pullMsgUrl) {
